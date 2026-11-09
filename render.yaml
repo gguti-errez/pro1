@@ -1,0 +1,23 @@
+# Despliegue en Render. Con SUPABASE_URL y SUPABASE_SERVICE_KEY los datos y evidencias viven en Supabase
+# y no hace falta disco persistente (se puede usar el plan gratuito). Sin Supabase se requiere el disco de pago.
+services:
+  - type: web
+    name: mttos-pbs
+    runtime: node
+    plan: starter
+    buildCommand: "echo sin dependencias"
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: SETUP_CODE
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: DATA_DIR
+        value: /data
+    disk:
+      name: datos
+      mountPath: /data
+      sizeGB: 1
