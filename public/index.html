@@ -516,6 +516,23 @@ async function toggle(r){
   $('c1').onclick=cancelModal;$('c2').onclick=async()=>{closeModal();touch();const prev=x;const ok=await save(r,{s:'P',by:myId,at:Date.now()},'P');if(ok)toast('Equipo reabierto',async()=>{await save(r,{s:'L',by:prev.a?prev.a.by:null,at:prev.a?prev.a.at:null},'L')})};
  }else avanceForm(r,'ready')}
 const OKT=['application/pdf','image/jpeg'];
+const IMG_MAX=100*1024;
+async function shrinkImg(f){
+ if(f.size<=IMG_MAX)return f;
+ const bmp=await createImageBitmap(f);
+ const sc0=Math.min(1,1600/Math.max(bmp.width,bmp.height));let sc=sc0;
+ const cv=document.createElement('canvas'),cx=cv.getContext('2d');
+ for(let i=0;i<9;i++){
+  cv.width=Math.max(1,Math.round(bmp.width*sc));cv.height=Math.max(1,Math.round(bmp.height*sc));
+  cx.fillStyle='#fff';cx.fillRect(0,0,cv.width,cv.height);cx.drawImage(bmp,0,0,cv.width,cv.height);
+  for(const q of [.8,.7,.6,.5,.4]){
+   const b=await new Promise(r=>cv.toBlob(r,'image/jpeg',q));
+   if(b&&b.size<=IMG_MAX){if(bmp.close)bmp.close();return b}
+  }
+  sc*=.8;
+ }
+ if(bmp.close)bmp.close();throw new Error('img');
+}
 function avanceForm(r,mode){
  const ready=mode==='ready',wait=mode==='wait';const x0=eff(r);const a=x0.a||{};const visReq=wait&&x0.s!=='R';const cur=(a.files||[]);
  const today=todayStr(),prog=a.prog||r.d,on=new Set(a.chk||[]);
@@ -538,7 +555,7 @@ function avanceForm(r,mode){
  ${ready?`<label>Próximo servicio (${FREQ} meses, sin domingo ni feriado)<input type="date" id="apx" required></label><p class="note" id="apn" aria-live="polite"></p>`:''}
  <label>Observaciones (opcional)<textarea id="an" maxlength="600" rows="4" placeholder="Escribe aquí cualquier observación del servicio: estado del equipo, hallazgos, recomendaciones…">${esc(a.note||'')}</textarea></label>
  ${cur.length?`<fieldset><legend>Evidencia guardada</legend>${cur.map((f,i)=>`<label class="chk"><input type="checkbox" data-keep="${i}" checked> <a href="/uploads/${esc(f.id)}" target="_blank" rel="noopener">${esc(f.name)}</a></label>`).join('')}</fieldset>`:''}
- ${ASSETS?`<label>Adjuntar PDF o JPG (opcional, máx. 3 archivos de 10 MB)<input type="file" id="afi" accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg" multiple></label>`:'<p class="note">Tu acceso actual no permite adjuntar archivos.</p>'}
+ ${ASSETS?`<label>Adjuntar PDF o JPG (opcional, máx. 3 archivos; las fotos se reducen solas a 100 KB)<input type="file" id="afi" accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg" multiple></label>`:'<p class="note">Tu acceso actual no permite adjuntar archivos.</p>'}
  <p class="err" id="aerr" aria-live="polite"></p><div class="mact"><button type="button" id="ac">Cancelar</button><button class="go" id="aok">${ready?'Guardar y marcar listo':wait?'Marcar en espera':'Guardar'}</button></div></form>`);
  $('ac').onclick=cancelModal;
  const cks=()=>[...$('af').querySelectorAll('[data-ck]')];
@@ -587,8 +604,8 @@ function avanceForm(r,mode){
   for(const f of fl){const okType=OKT.includes(f.type)||/\.(pdf|jpe?g)$/i.test(f.name);if(!okType)return err(`"${f.name}" no es PDF ni JPG.`);if(f.size>10*1048576)return err(`"${f.name}" pesa más de 10 MB.`)}
   const label=$('aok').textContent;$('aok').disabled=true;$('aok').textContent=fl.length?'Subiendo…':'Guardando…';
   const added=[];
-  try{for(const f of fl){const type=f.type||(/pdf$/i.test(f.name)?'application/pdf':'image/jpeg');const up=await ASSETS.upload(new Blob([f],{type}),{type});added.push({id:up.id,name:f.name.slice(0,80),type})}}
-  catch(e){$('aerr').textContent='No se pudo subir un archivo. Revisa el formato e intenta de nuevo.';$('aok').disabled=false;$('aok').textContent=label;return}
+  try{for(const f of fl){const type=f.type||(/pdf$/i.test(f.name)?'application/pdf':'image/jpeg');const src=type==='application/pdf'?f:await shrinkImg(f);const up=await ASSETS.upload(new Blob([src],{type}),{type});added.push({id:up.id,name:f.name.slice(0,80),type})}}
+  catch(e){$('aerr').textContent=e&&e.message==='img'?'No se pudo reducir una foto a 100 KB. Prueba con otra imagen.':'No se pudo subir un archivo. Revisa el formato e intenta de nuevo.';$('aok').disabled=false;$('aok').textContent=label;return}
   const patch={note:$('an').value.trim(),files:[...keep,...added],chk,cont,cbn,ccl};if($('ahi')&&!wait){patch.hi=hi;patch.hf=hf}
   if(sigOn){const nf=$('sgn').checked;const fi=nf?null:{img:$('sgc').toDataURL('image/png'),t:Date.now(),by:myId};const si=nf?{m:$('sgm').value.trim(),t:Date.now(),by:myId}:null;if(fi&&fi.img.length>40000)return err('La firma es demasiado grande. Bórrala y vuelve a firmar con trazos más simples.');
    if(ready){patch.firma=fi;patch.sinf=si}else{patch.vis=[...(a.vis||[]),{t:Date.now(),by:myId,f:today,hi,hf,firma:fi,sinf:si}].slice(-30)}}
