@@ -24,6 +24,7 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const SESSION_MIN = parseInt(process.env.SESSION_MINUTES || '60', 10);
 const MASTER_USER = (process.env.MASTER_USER || 'admin').toLowerCase();
 const MAX_UPLOAD = 10 * 1024 * 1024;
+const MAX_IMG = 100 * 1024; /* fotos JPG: máximo 100 KB */
 const MAX_DOC = 64 * 1024;
 const SETUP_CODE = process.env.SETUP_CODE || '';
 
@@ -419,6 +420,7 @@ const server = http.createServer(async (req, res) => {
       const isPdf = buf.slice(0, 5).toString() === '%PDF-';
       const isJpg = buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
       if (!isPdf && !isJpg) return send(res, 415, { error: 'Solo se permiten PDF o JPG.' });
+      if (isJpg && buf.length > MAX_IMG) return send(res, 413, { error: 'La foto supera 100 KB.' });
       const id = (cl === 'corinsa' ? '' : cl + '_') + crypto.randomBytes(16).toString('hex') + (isPdf ? '.pdf' : '.jpg');
       fs.writeFileSync(path.join(UPLOAD_DIR, id), buf);
       if (store.enabled) {
